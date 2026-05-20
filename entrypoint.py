@@ -19,8 +19,8 @@ def main():
     # 1. Gather environmental configurations from the GitHub Action context
     github_token = os.environ.get("GITHUB_TOKEN","")
     repo = os.environ.get("INPUT_REPO", "")
-    config_path = os.environ.get("INPUT_CONFIG_FILE","")       # e.g., './src/repos.yaml'
-    pipeline_path = os.environ.get("INPUT_PIPELINE_FILE", "")   # e.g., './src/pipeline.yml'
+    config_path = os.environ.get("INPUT_CONFIG_PATH","")       # e.g., './src/repos.yaml'
+    pipeline_path = os.environ.get("INPUT_PIPELINE_PATH", "")   # e.g., './src/pipeline.yml'
     event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
     dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
 
