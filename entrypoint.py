@@ -1,6 +1,8 @@
+import logging
 def main():
-    pass
+    logging.info("Starting build process")
 
 
 if __name__ == "__main__":
     main()
+
