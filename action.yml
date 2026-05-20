@@ -10,4 +10,4 @@ inputs:
 
 runs:
   using: 'docker'
-  image: 'docker://ghcr.io/Impress-Foods/sh-module-bundler:latest'
+  image: 'docker://ghcr.io/impress-foods/sh-module-bundler:latest'
