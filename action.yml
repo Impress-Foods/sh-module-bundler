@@ -5,8 +5,19 @@ inputs:
   config_file:
     description: 'Path to repos.yaml inside the calling workspace'
     required: false
-    default: 'repos.yaml'
-
+    default: 'repos.yml'
+  pipeline_file:
+    description: 'Path to pipeline.yaml inside the calling workspace'
+    required: false
+    default: 'pipeline.yml'
+  event_type:
+    description: 'Event type'
+    required: false
+    default: ''
+  destination_path:
+    description: "Destination location for compiled addons"
+    required: false
+    default: "./compiled_addons"
 
 runs:
   using: 'docker'
