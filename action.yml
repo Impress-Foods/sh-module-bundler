@@ -1,0 +1,13 @@
+name: "Sh module bundler"
+description: "Bundles third-party modules into an Odoo.sh deployment repo"
+
+inputs:
+  config_file:
+    description: 'Path to repos.yaml inside the calling workspace'
+    required: false
+    default: 'repos.yaml'
+
+
+runs:
+  using: 'docker'
+  image: 'docker://ghcr.io/Impress-Foods/sh-module-bundler:latest'
