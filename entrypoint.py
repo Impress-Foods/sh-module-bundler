@@ -42,6 +42,7 @@ def main():
     base_branch = os.environ.get("INPUT_BASE_BRANCH", "")
     git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Odoo.sh Bundler")
     git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "bundler@odoo.sh")
+    skip_push = os.environ.get("SKIP_PUSH", "").lower() in ("1", "true", "yes")
 
     required = [github_token, repo, event_type, target_branch, base_branch]
     if not all(required):
@@ -76,7 +77,7 @@ def main():
     repos_config = fetch_yaml(repo, "repos.yml", base_branch, github_token) or {}
 
     # Auto-inject the code repo itself so its modules are aggregated alongside third-party repos
-    code_key = f"{base_temp_path}/tmp_git_aggregate/code_repo"
+    code_key = f"{base_temp_path}/code_repo"
     code_repo_url = f"https://x-access-token:{github_token}@github.com/{repo}"
     repos_config[code_key] = {
         "remotes": {"origin": code_repo_url},
@@ -169,28 +170,31 @@ def main():
             shutil.move(os.path.join(dest_path, item), os.path.join(os.getcwd(), item))
         shutil.rmtree(dest_path)
 
-    # 10. Commit and push to deployment repo
-    print(f"Committing and pushing to branch: {target_branch}...")
-    run_command(["git", "config", "--global", "--add", "safe.directory", "/github/workspace"])
-    run_command(["git", "config", "--global", "user.name", git_user_name])
-    run_command(["git", "config", "--global", "user.email", git_user_email])
+    if not skip_push:
+        # 10. Commit and push to deployment repo
+        print(f"Committing and pushing to branch: {target_branch}...")
+        run_command(["git", "config", "--global", "--add", "safe.directory", "/github/workspace"])
+        run_command(["git", "config", "--global", "user.name", git_user_name])
+        run_command(["git", "config", "--global", "user.email", git_user_email])
 
-    result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
-    origin_url = result.stdout.strip()
-    auth_url = origin_url.replace("https://", f"https://x-access-token:{github_token}@")
-    run_command(["git", "remote", "set-url", "origin", auth_url])
+        result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+        origin_url = result.stdout.strip()
+        auth_url = origin_url.replace("https://", f"https://x-access-token:{github_token}@")
+        run_command(["git", "remote", "set-url", "origin", auth_url])
 
-    run_command(["git", "add", "-A"])
+        run_command(["git", "add", "-A"])
 
-    result = subprocess.run(
-        ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
-        capture_output=True, text=True
-    )
-    if result.returncode == 0:
-        print(f"   Commit created. Pushing to {target_branch}...")
-        run_command(["git", "push", "--force", "origin", f"HEAD:{target_branch}"])
+        result = subprocess.run(
+            ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
+            capture_output=True, text=True
+        )
+        if result.returncode == 0:
+            print(f"   Commit created. Pushing to {target_branch}...")
+            run_command(["git", "push", "--force", "origin", f"HEAD:{target_branch}"])
+        else:
+            print("   Nothing new to commit.")
     else:
-        print("   Nothing new to commit.")
+        print("     SKIP_PUSH set - skipping commit and push")
 
     print("Task terminated successfully.")
 
