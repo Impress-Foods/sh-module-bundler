@@ -2,33 +2,17 @@ name: "Sh module bundler"
 description: "Bundles third-party modules into an Odoo.sh deployment repo"
 
 inputs:
-  config_path:
-    description: "Path to repos.yaml inside the calling workspace"
-    required: false
-    default: "repos.yml"
-  pipeline_path:
-    description: "Path to pipeline.yaml inside the calling workspace"
-    required: false
-    default: "pipeline.yml"
-  event_type:
-    description: "Event type"
-    required: false
-    default: ""
-  destination_path:
-    description: "Destination location for compiled addons"
-    required: false
-    default: "./compiled_addons"
+  repo:
+    description: "Source repository (org/repo)"
+    required: true
   target_branch:
     description: "Branch to push compiled addons to in the deployment repo"
     required: true
-  git_user_name:
-    description: "Git commit author name"
+  event_type:
+    description: "trigger_staging_build or trigger_production_build"
     required: true
-  git_user_email:
-    description: "Git commit author email"
-    required: true
-  repo:
-    description: "Source repo"
+  base_branch:
+    description: "Base branch of the code repo to fetch config files from"
     required: true
 
 runs:

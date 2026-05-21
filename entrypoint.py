@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import base64
 import logging
 import os
 import sys
@@ -16,22 +17,33 @@ def run_command(cmd, cwd=None):
         print(f"Error: Command failed with exit code {result.returncode}")
         sys.exit(result.returncode)
 
+def fetch_yaml(repo, path, ref, token):
+    """Fetch a YAML file from the code repo via GitHub Contents API."""
+    url = f"https://api.github.com/repos/{repo}/contents/{path}?ref={ref}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    content = base64.b64decode(response.json()["content"])
+    return yaml.safe_load(content)
+
 def main():
 
     base_temp_path = "/tmp/bundler"
+    dest_path = "./compiled_addons"
 
     # 1. Gather environmental configurations from the GitHub Action context
-    github_token = os.environ.get("GITHUB_TOKEN","")
+    github_token = os.environ.get("GITHUB_TOKEN", "")
     repo = os.environ.get("INPUT_REPO", "")
-    config_path = os.environ.get("INPUT_CONFIG_PATH","")       # e.g., './src/repos.yaml'
-    pipeline_path = os.environ.get("INPUT_PIPELINE_PATH", "")   # e.g., './src/pipeline.yml'
-    event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
-    dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
+    event_type = os.environ.get("INPUT_EVENT_TYPE", "")
     target_branch = os.environ.get("INPUT_TARGET_BRANCH", "")
-    git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Impress Foods")
-    git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "info@impressfoods")
+    base_branch = os.environ.get("INPUT_BASE_BRANCH", "")
+    git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Odoo.sh Bundler")
+    git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "bundler@odoo.sh")
 
-    required = [github_token, repo, config_path, pipeline_path, event_type, dest_path, target_branch]
+    required = [github_token, repo, event_type, target_branch, base_branch]
     if not all(required):
         if not github_token:
             logging.error("Error: missing Github token")
@@ -39,141 +51,107 @@ def main():
         if not repo:
             logging.error("Error: missing repo name")
             sys.exit(1)
-        if not config_path:
-            logging.error("Error: missing config file path")
-            sys.exit(1)
-        if not pipeline_path:
-            logging.error("Error: missing pipeline file path")
-            sys.exit(1)
         if not event_type:
             logging.error("Error: missing event type")
-            sys.exit(1)
-        if not dest_path:
-            logging.error("Error: missing destination file path")
             sys.exit(1)
         if not target_branch:
             logging.error("Error: missing target branch")
             sys.exit(1)
+        if not base_branch:
+            logging.error("Error: missing base branch")
+            sys.exit(1)
 
+    # 2. Fetch pipeline.yml from the code repo
+    print(f"Fetching pipeline.yml from {repo}@{base_branch}...")
+    pipeline_data = fetch_yaml(repo, "pipeline.yml", base_branch, github_token) or {}
 
-    # 2. Parse the custom pipeline layout metadata
-    print(f"Reading pipeline setup blueprint from: {pipeline_path}")
-    with open(pipeline_path, "r") as f:
-        pipeline_data = yaml.safe_load(f) or {}
-    
     module_whitelist = pipeline_data.get("module_whitelist", [])
     automation_cfg = pipeline_data.get("automation", {})
     target_label = automation_cfg.get("pr_trigger_label", "to-staging")
-    
+
     print(f"Whitelisted target modules to pluck: {module_whitelist}")
 
-    # 3. Read the base repository dependency tree configuration
-    print(f"Reading baseline dependency rules from: {config_path}")
-    with open(config_path, "r") as f:
-        repos_config = yaml.safe_load(f) or {}
+    # 3. Fetch repos.yml from the code repo
+    print(f"Fetching repos.yml from {repo}@{base_branch}...")
+    repos_config = fetch_yaml(repo, "repos.yml", base_branch, github_token) or {}
 
-    # 4. Ingest and inject active tagged PRs ONLY if executing a staging build
+    # 4. Discover PRs labeled for staging injection
     if event_type == "trigger_staging_build":
-        if not github_token:
-            print("Error: GITHUB_TOKEN environment variable is missing. Cannot call API.")
-            sys.exit(1)
-            
-        print(f"Staging context identified. Scanning Code Repo for open PRs labeled: '{target_label}'")
-        
-        # Target repository path for your private codebase
-        code_repo = repo
-        url = f"https://api.github.com/repos/{code_repo}/pulls?state=open"
+        print(f"Staging context identified. Scanning PRs targeting '{base_branch}' labeled: '{target_label}'")
+
+        url = f"https://api.github.com/repos/{repo}/pulls?state=open&base={base_branch}"
         headers = {
             "Authorization": f"token {github_token}",
             "Accept": "application/vnd.github.v3+json"
         }
-        
+
         try:
             response = requests.get(url, headers=headers)
             response.raise_for_status()
-            prs = response.json()
-            
-            for pr in prs:
+
+            for pr in response.json():
                 labels = [l["name"] for l in pr.get("labels", [])]
                 if target_label in labels:
                     pr_num = pr["number"]
                     pr_branch = pr["head"]["ref"]
                     pr_repo_url = pr["head"]["repo"]["clone_url"]
-                    
-                    # Inject organization token credentials to authorize gitaggregate's private clone sequence
                     authenticated_url = pr_repo_url.replace("https://", f"https://x-access-token:{github_token}@")
-                    
+
                     print(f"   ↳ Found matching PR #{pr_num} | Branch: '{pr_branch}'")
-                    
-                    # Allocate unique isolated staging targets inside our compilation sandbox
+
                     repos_config[f"{base_temp_path}/tmp_git_aggregate/pr_{pr_num}"] = {
-                        "remotes": {
-                            "origin": authenticated_url
-                        },
-                        "target": f"origin {pr_branch}"
+                        "remotes": {"origin": authenticated_url},
+                        "merges": [f"origin {pr_branch}"]
                     }
         except Exception as e:
-            print(f"Warning: GitHub API evaluation failed: {e}. Proceeding with fallback mode (base modules only).")
+            print(f"Warning: PR discovery failed: {e}. Proceeding with base modules only.")
 
-    # 5. Flush the compiled memory layout into a temporary operational runtime manifest
+    # 5. Write runtime manifest
     runtime_manifest = f"{base_temp_path}/runtime_repos.yml"
+    os.makedirs(os.path.dirname(runtime_manifest), exist_ok=True)
     with open(runtime_manifest, "x") as f:
         yaml.dump(repos_config, f)
-    print(f"Runtime manifest calculated and written to: {runtime_manifest}")
+    print(f"Runtime manifest written to: {runtime_manifest}")
 
-    # 6. Fire git-aggregator to compile external branches into the sandbox root
+    # 6. Run git-aggregator
     print("Invoking git-aggregator core dependency engine...")
     run_command(["gitaggregate", "-c", runtime_manifest], cwd=base_temp_path)
 
-    # 7. Purge stale targets and establish the clean destination directory
-    print(f"Resetting target output compilation directory: {dest_path}")
+    # 7. Prepare destination directory
+    print(f"Resetting target output directory: {dest_path}")
     if os.path.exists(dest_path):
         shutil.rmtree(dest_path)
     os.makedirs(dest_path, exist_ok=True)
 
-    # 8. Filter, slice, and flatten out requested modules (The Plucking Phase)
-    print("Commencing module filtering phase based on explicit whitelist tracking...")
+    # 8. Pluck whitelisted modules from aggregated repos
+    print("Commencing module filtering phase...")
     search_root = Path(base_temp_path)
-    
+
     if not search_root.exists():
-        print("Warning: No codebases compiled by git-aggregator. Check your configuration parameters.")
+        print("Warning: No codebases compiled by git-aggregator.")
         sys.exit(0)
 
-    # Cross-reference the whitelist against our downloaded source matrix directories
     for module in module_whitelist:
         found = False
-        # Sweep all codebases downloaded into the compilation sandbox root folder
         for repo_dir in search_root.iterdir():
             if repo_dir.is_dir():
                 potential_module_path = repo_dir / module
-                # Extract and duplicate the inner module root directory if discovered
                 if potential_module_path.exists() and potential_module_path.is_dir():
-                    print(f"   Extracted module '{module}' directly out of package directory: {repo_dir.name}")
+                    print(f"   Extracted module '{module}' from: {repo_dir.name}")
                     shutil.copytree(potential_module_path, Path(dest_path) / module, dirs_exist_ok=True)
                     found = True
                     break
         if not found:
-            print(f"Warning: Whitelisted module '{module}' was requested, but was completely absent from all source repositories.")
+            print(f"Warning: Module '{module}' not found in any aggregated repository.")
 
-    # 9. Move modules from compiled_addons to repo root and clean scaffolding
+    # 9. Move modules to repo root and clean up
     print("Assembling final directory structure...")
     if os.path.exists(dest_path):
         for item in os.listdir(dest_path):
             shutil.move(os.path.join(dest_path, item), os.path.join(os.getcwd(), item))
         shutil.rmtree(dest_path)
 
-    if os.path.exists("./src/requirements.txt"):
-        shutil.copy("./src/requirements.txt", "./requirements.txt")
-
-    for cleanup in ["./src", "./.github", "./.gitignore"]:
-        path = Path(cleanup)
-        if path.exists():
-            if path.is_dir():
-                shutil.rmtree(path)
-            else:
-                path.unlink()
-
-    # 10. Commit compiled addons to deployment repo and push to target branch
+    # 10. Commit and push to deployment repo
     print(f"Committing and pushing to branch: {target_branch}...")
     run_command(["git", "config", "--global", "--add", "safe.directory", "/github/workspace"])
     run_command(["git", "config", "--global", "user.name", git_user_name])
@@ -187,7 +165,7 @@ def main():
     run_command(["git", "add", "-A"])
 
     result = subprocess.run(
-        ["git", "commit", "-m", f"Automated build from {repo}"],
+        ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
         capture_output=True, text=True
     )
     if result.returncode == 0:
