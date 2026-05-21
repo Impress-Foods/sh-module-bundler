@@ -23,12 +23,10 @@ inputs:
     required: true
   git_user_name:
     description: "Git commit author name"
-    required: false
-    default: "Odoo.sh Bundler"
+    required: true
   git_user_email:
     description: "Git commit author email"
-    required: false
-    default: "bundler@odoo.sh"
+    required: true
   repo:
     description: "Source repo"
     required: true
