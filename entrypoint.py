@@ -129,7 +129,16 @@ def main():
         shutil.rmtree(dest_path)
     os.makedirs(dest_path, exist_ok=True)
 
-    # 8. Pluck modules from aggregated repos
+    # 8. Remove stale modules from previous builds
+    print("Cleaning stale modules from workspace root...")
+    workspace = os.getcwd()
+    for item in os.listdir(workspace):
+        item_path = os.path.join(workspace, item)
+        if os.path.isdir(item_path) and (Path(item_path) / "__manifest__.py").exists():
+            print(f"   Removing stale module: {item}")
+            shutil.rmtree(item_path)
+
+    # 9. Pluck modules from aggregated repos
     print("Commencing module extraction...")
     search_root = Path(base_temp_path)
 
@@ -163,15 +172,15 @@ def main():
         if not found:
             print(f"Warning: Module '{module}' not found in any aggregated repository.")
 
-    # 9. Move modules to repo root and clean up
+    # 10. Move modules to repo root
     print("Assembling final directory structure...")
     if os.path.exists(dest_path):
         for item in os.listdir(dest_path):
-            shutil.move(os.path.join(dest_path, item), os.path.join(os.getcwd(), item))
+            shutil.move(os.path.join(dest_path, item), os.path.join(workspace, item))
         shutil.rmtree(dest_path)
 
     if not skip_push:
-        # 10. Commit and push to deployment repo
+        # 11. Commit and push to deployment repo
         print(f"Committing and pushing to branch: {target_branch}...")
         run_command(["git", "config", "--global", "--add", "safe.directory", "/github/workspace"])
         run_command(["git", "config", "--global", "user.name", git_user_name])
