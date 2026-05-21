@@ -106,10 +106,7 @@ def main():
 
                     print(f"   ↳ Found matching PR #{pr_num} | Branch: '{pr_branch}'")
 
-                    repos_config[f"{base_temp_path}/tmp_git_aggregate/pr_{pr_num}"] = {
-                        "remotes": {"origin": authenticated_url},
-                        "merges": [f"origin {pr_branch}"]
-                    }
+                    repos_config[code_key]["merges"].append(f"origin {pr_branch}")
         except Exception as e:
             print(f"Warning: PR discovery failed: {e}. Proceeding with base modules only.")
 
@@ -130,24 +127,37 @@ def main():
         shutil.rmtree(dest_path)
     os.makedirs(dest_path, exist_ok=True)
 
-    # 8. Pluck whitelisted modules from aggregated repos
-    print("Commencing module filtering phase...")
+    # 8. Pluck modules from aggregated repos
+    print("Commencing module extraction...")
     search_root = Path(base_temp_path)
 
     if not search_root.exists():
         print("Warning: No codebases compiled by git-aggregator.")
         sys.exit(0)
 
+    code_repo_dir = search_root / "code_repo"
+
+    # Pass 1: Copy ALL Odoo modules from the code repo (bypasses whitelist)
+    if code_repo_dir.exists():
+        for item in code_repo_dir.iterdir():
+            if item.is_dir() and (item / "__manifest__.py").exists():
+                print(f"   Extracted code repo module: {item.name}")
+                shutil.copytree(item, Path(dest_path) / item.name, dirs_exist_ok=True)
+
+    # Pass 2: Copy whitelisted modules from other repos (skip if already copied)
     for module in module_whitelist:
+        if (Path(dest_path) / module).exists():
+            continue
         found = False
         for repo_dir in search_root.iterdir():
-            if repo_dir.is_dir():
-                potential_module_path = repo_dir / module
-                if potential_module_path.exists() and potential_module_path.is_dir():
-                    print(f"   Extracted module '{module}' from: {repo_dir.name}")
-                    shutil.copytree(potential_module_path, Path(dest_path) / module, dirs_exist_ok=True)
-                    found = True
-                    break
+            if repo_dir.name == "code_repo" or not repo_dir.is_dir():
+                continue
+            potential_module_path = repo_dir / module
+            if potential_module_path.exists() and potential_module_path.is_dir():
+                print(f"   Extracted module '{module}' from: {repo_dir.name}")
+                shutil.copytree(potential_module_path, Path(dest_path) / module, dirs_exist_ok=True)
+                found = True
+                break
         if not found:
             print(f"Warning: Module '{module}' not found in any aggregated repository.")
 
