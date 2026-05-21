@@ -2,8 +2,6 @@ name: Build and Publish Action Image
 
 on:
   push:
-    branches:
-      - main
     tags:
       - "v*" # Triggers on semantic version tags (e.g., v1.0.0, v1.2.0)
 
