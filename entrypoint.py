@@ -76,8 +76,9 @@ def main():
     repos_config = fetch_yaml(repo, "repos.yml", base_branch, github_token) or {}
 
     # Auto-inject the code repo itself so its modules are aggregated alongside third-party repos
+    code_key = f"{base_temp_path}/tmp_git_aggregate/code_repo"
     code_repo_url = f"https://x-access-token:{github_token}@github.com/{repo}"
-    repos_config[f"{base_temp_path}/tmp_git_aggregate/code_repo"] = {
+    repos_config[code_key] = {
         "remotes": {"origin": code_repo_url},
         "merges": [f"origin {base_branch}"]
     }
