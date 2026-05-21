@@ -75,6 +75,13 @@ def main():
     print(f"Fetching repos.yml from {repo}@{base_branch}...")
     repos_config = fetch_yaml(repo, "repos.yml", base_branch, github_token) or {}
 
+    # Auto-inject the code repo itself so its modules are aggregated alongside third-party repos
+    code_repo_url = f"https://x-access-token:{github_token}@github.com/{repo}"
+    repos_config[f"{base_temp_path}/tmp_git_aggregate/code_repo"] = {
+        "remotes": {"origin": code_repo_url},
+        "merges": [f"origin {base_branch}"]
+    }
+
     # 4. Discover PRs labeled for staging injection
     if event_type == "trigger_staging_build":
         print(f"Staging context identified. Scanning PRs targeting '{base_branch}' labeled: '{target_label}'")
