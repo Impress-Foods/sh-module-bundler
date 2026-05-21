@@ -28,8 +28,8 @@ def main():
     event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
     dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
     target_branch = os.environ.get("INPUT_TARGET_BRANCH", "")
-    git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Odoo.sh Bundler")
-    git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "bundler@odoo.sh")
+    git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Impress Foods")
+    git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "info@impressfoods")
 
     required = [github_token, repo, config_path, pipeline_path, event_type, dest_path, target_branch]
     if not all(required):
