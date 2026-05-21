@@ -1,0 +1,22 @@
+{
+    "name": "Odoo GitOps Bundler Dev",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "mounts": [
+        "source=../sh-19,target=/workspaces/sh-19,type=bind",
+        "source=../test-code-repo-sh,target=/workspaces/test-code-repo-sh,type=bind"
+    ],
+    "runArgs": [
+        "--env-file",
+        ".devcontainer/devcontainer.env"
+    ],
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.debugpy",
+                "meta.pyrefly"
+            ]
+        }
+    }
+}

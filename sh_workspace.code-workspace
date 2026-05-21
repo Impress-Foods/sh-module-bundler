@@ -1,0 +1,19 @@
+{
+    "folders": [
+        {
+            "name": "action",
+            "path": "."
+        },
+        {
+            "name": "sh",
+            "path": "../sh-19"
+        },
+        {
+            "path": "../test-code-repo-sh"
+        },
+        {
+            "name": "temp",
+            "path": "/tmp/bundler"
+        }
+    ],
+}

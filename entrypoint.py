@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import logging
 import os
 import sys
 import yaml
@@ -16,6 +17,9 @@ def run_command(cmd, cwd=None):
         sys.exit(result.returncode)
 
 def main():
+
+    base_temp_path = "/tmp/bundler"
+
     # 1. Gather environmental configurations from the GitHub Action context
     github_token = os.environ.get("GITHUB_TOKEN","")
     repo = os.environ.get("INPUT_REPO", "")
@@ -23,10 +27,31 @@ def main():
     pipeline_path = os.environ.get("INPUT_PIPELINE_PATH", "")   # e.g., './src/pipeline.yml'
     event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
     dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
+    workspace_dest_link = dest_path  # original path for downstream symlink
 
-    if not all([repo, config_path, pipeline_path, event_type, dest_path]):
-        print("Error: Missing required structural inputs. Verify your action parameters.")
-        sys.exit(1)
+    if not os.path.isabs(dest_path):
+        dest_path = os.path.join(base_temp_path, dest_path)
+
+    if not all([github_token, repo, config_path, pipeline_path, event_type, dest_path]):
+        if not github_token:
+            logging.error("Error: missing Github token")
+            sys.exit(1)
+        if not repo:
+            logging.error("Error: missing repo name")
+            sys.exit(1)
+        if not config_path:
+            logging.error("Error: missing config file path")
+            sys.exit(1)
+        if not pipeline_path:
+            logging.error("Error: missing pipeline file path")
+            sys.exit(1)
+        if not event_type:
+            logging.error("Error: missing event type")
+            sys.exit(1)
+        if not dest_path:
+            logging.error("Error: missing destination file path")
+            sys.exit(1)
+
 
     # 2. Parse the custom pipeline layout metadata
     print(f"Reading pipeline setup blueprint from: {pipeline_path}")
@@ -53,7 +78,7 @@ def main():
         print(f"Staging context identified. Scanning Code Repo for open PRs labeled: '{target_label}'")
         
         # Target repository path for your private codebase
-        code_repo = f"impress-foods/{repo}" 
+        code_repo = repo
         url = f"https://api.github.com/repos/{code_repo}/pulls?state=open"
         headers = {
             "Authorization": f"token {github_token}",
@@ -78,7 +103,7 @@ def main():
                     print(f"   ↳ Found matching PR #{pr_num} | Branch: '{pr_branch}'")
                     
                     # Allocate unique isolated staging targets inside our compilation sandbox
-                    repos_config[f"./tmp_git_aggregate/pr_{pr_num}"] = {
+                    repos_config[f"{base_temp_path}/tmp_git_aggregate/pr_{pr_num}"] = {
                         "remotes": {
                             "origin": authenticated_url
                         },
@@ -88,14 +113,14 @@ def main():
             print(f"Warning: GitHub API evaluation failed: {e}. Proceeding with fallback mode (base modules only).")
 
     # 5. Flush the compiled memory layout into a temporary operational runtime manifest
-    runtime_manifest = "./runtime_repos.yaml"
-    with open(runtime_manifest, "w") as f:
+    runtime_manifest = f"{base_temp_path}/runtime_repos.yml"
+    with open(runtime_manifest, "x") as f:
         yaml.dump(repos_config, f)
     print(f"Runtime manifest calculated and written to: {runtime_manifest}")
 
     # 6. Fire git-aggregator to compile external branches into the sandbox root
     print("Invoking git-aggregator core dependency engine...")
-    run_command(["gitaggregate", "-c", runtime_manifest])
+    run_command(["gitaggregate", "-c", runtime_manifest], cwd=base_temp_path)
 
     # 7. Purge stale targets and establish the clean destination directory
     print(f"Resetting target output compilation directory: {dest_path}")
@@ -105,7 +130,7 @@ def main():
 
     # 8. Filter, slice, and flatten out requested modules (The Plucking Phase)
     print("Commencing module filtering phase based on explicit whitelist tracking...")
-    search_root = Path("./tmp_git_aggregate")
+    search_root = Path(base_temp_path)
     
     if not search_root.exists():
         print("Warning: No codebases compiled by git-aggregator. Check your configuration parameters.")
@@ -126,6 +151,18 @@ def main():
                     break
         if not found:
             print(f"Warning: Whitelisted module '{module}' was requested, but was completely absent from all source repositories.")
+
+    # 9. Create symlink from workspace path to /tmp/bundler for downstream pipeline steps
+    if workspace_dest_link and not os.path.isabs(workspace_dest_link):
+        link_path = Path(workspace_dest_link)
+        if link_path.exists() or link_path.is_symlink():
+            if link_path.is_dir() and not link_path.is_symlink():
+                shutil.rmtree(link_path)
+            else:
+                link_path.unlink()
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(dest_path, workspace_dest_link)
+        print(f"Created symlink: {workspace_dest_link} -> {dest_path}")
 
     print("Task terminated successfully.")
 

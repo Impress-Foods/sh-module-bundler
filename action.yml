@@ -3,25 +3,25 @@ description: "Bundles third-party modules into an Odoo.sh deployment repo"
 
 inputs:
   config_path:
-    description: 'Path to repos.yaml inside the calling workspace'
+    description: "Path to repos.yaml inside the calling workspace"
     required: false
-    default: 'repos.yml'
+    default: "repos.yml"
   pipeline_path:
-    description: 'Path to pipeline.yaml inside the calling workspace'
+    description: "Path to pipeline.yaml inside the calling workspace"
     required: false
-    default: 'pipeline.yml'
+    default: "pipeline.yml"
   event_type:
-    description: 'Event type'
+    description: "Event type"
     required: false
-    default: ''
+    default: ""
   destination_path:
     description: "Destination location for compiled addons"
     required: false
     default: "./compiled_addons"
-  target_branch:
-    description: "Target brnach on target repo"
+  repo:
+    description: "Source repo"
     required: true
 
 runs:
-  using: 'docker'
-  image: 'docker://ghcr.io/impress-foods/sh-module-bundler:latest'
+  using: "docker"
+  image: "docker://ghcr.io/impress-foods/sh-module-bundler:latest"
