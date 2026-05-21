@@ -18,6 +18,17 @@ inputs:
     description: "Destination location for compiled addons"
     required: false
     default: "./compiled_addons"
+  target_branch:
+    description: "Branch to push compiled addons to in the deployment repo"
+    required: true
+  git_user_name:
+    description: "Git commit author name"
+    required: false
+    default: "Odoo.sh Bundler"
+  git_user_email:
+    description: "Git commit author email"
+    required: false
+    default: "bundler@odoo.sh"
   repo:
     description: "Source repo"
     required: true

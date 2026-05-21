@@ -27,8 +27,12 @@ def main():
     pipeline_path = os.environ.get("INPUT_PIPELINE_PATH", "")   # e.g., './src/pipeline.yml'
     event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
     dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
+    target_branch = os.environ.get("INPUT_TARGET_BRANCH", "")
+    git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Odoo.sh Bundler")
+    git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "bundler@odoo.sh")
 
-    if not all([github_token, repo, config_path, pipeline_path, event_type, dest_path]):
+    required = [github_token, repo, config_path, pipeline_path, event_type, dest_path, target_branch]
+    if not all(required):
         if not github_token:
             logging.error("Error: missing Github token")
             sys.exit(1)
@@ -46,6 +50,9 @@ def main():
             sys.exit(1)
         if not dest_path:
             logging.error("Error: missing destination file path")
+            sys.exit(1)
+        if not target_branch:
+            logging.error("Error: missing target branch")
             sys.exit(1)
 
 
@@ -147,6 +154,46 @@ def main():
                     break
         if not found:
             print(f"Warning: Whitelisted module '{module}' was requested, but was completely absent from all source repositories.")
+
+    # 9. Move modules from compiled_addons to repo root and clean scaffolding
+    print("Assembling final directory structure...")
+    if os.path.exists(dest_path):
+        for item in os.listdir(dest_path):
+            shutil.move(os.path.join(dest_path, item), os.path.join(os.getcwd(), item))
+        shutil.rmtree(dest_path)
+
+    if os.path.exists("./src/requirements.txt"):
+        shutil.copy("./src/requirements.txt", "./requirements.txt")
+
+    for cleanup in ["./src", "./.github", "./.gitignore"]:
+        path = Path(cleanup)
+        if path.exists():
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+
+    # 10. Commit compiled addons to deployment repo and push to target branch
+    print(f"Committing and pushing to branch: {target_branch}...")
+    run_command(["git", "config", "user.name", git_user_name])
+    run_command(["git", "config", "user.email", git_user_email])
+
+    result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
+    origin_url = result.stdout.strip()
+    auth_url = origin_url.replace("https://", f"https://x-access-token:{github_token}@")
+    run_command(["git", "remote", "set-url", "origin", auth_url])
+
+    run_command(["git", "add", "-A"])
+
+    result = subprocess.run(
+        ["git", "commit", "-m", f"Automated build from {repo}"],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print(f"   Commit created. Pushing to {target_branch}...")
+        run_command(["git", "push", "--force", "origin", f"HEAD:{target_branch}"])
+    else:
+        print("   Nothing new to commit.")
 
     print("Task terminated successfully.")
 
