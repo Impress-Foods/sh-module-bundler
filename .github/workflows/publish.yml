@@ -5,7 +5,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*' # Triggers on semantic version tags (e.g., v1.0.0, v1.2.0)
+      - "v*" # Triggers on semantic version tags (e.g., v1.0.0, v1.2.0)
 
 # Grant the workflow permissions to write packages to your GitHub Organization/Account
 permissions:
