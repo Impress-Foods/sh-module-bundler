@@ -27,10 +27,6 @@ def main():
     pipeline_path = os.environ.get("INPUT_PIPELINE_PATH", "")   # e.g., './src/pipeline.yml'
     event_type = os.environ.get("INPUT_EVENT_TYPE","")         # 'trigger_staging_build' or 'trigger_production_build'
     dest_path = os.environ.get("INPUT_DESTINATION_PATH", "")   # e.g., './compiled_addons'
-    workspace_dest_link = dest_path  # original path for downstream symlink
-
-    if not os.path.isabs(dest_path):
-        dest_path = os.path.join(base_temp_path, dest_path)
 
     if not all([github_token, repo, config_path, pipeline_path, event_type, dest_path]):
         if not github_token:
@@ -151,18 +147,6 @@ def main():
                     break
         if not found:
             print(f"Warning: Whitelisted module '{module}' was requested, but was completely absent from all source repositories.")
-
-    # 9. Create symlink from workspace path to /tmp/bundler for downstream pipeline steps
-    if workspace_dest_link and not os.path.isabs(workspace_dest_link):
-        link_path = Path(workspace_dest_link)
-        if link_path.exists() or link_path.is_symlink():
-            if link_path.is_dir() and not link_path.is_symlink():
-                shutil.rmtree(link_path)
-            else:
-                link_path.unlink()
-        link_path.parent.mkdir(parents=True, exist_ok=True)
-        os.symlink(dest_path, workspace_dest_link)
-        print(f"Created symlink: {workspace_dest_link} -> {dest_path}")
 
     print("Task terminated successfully.")
 
