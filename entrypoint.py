@@ -175,6 +175,7 @@ def main():
 
     # 10. Commit compiled addons to deployment repo and push to target branch
     print(f"Committing and pushing to branch: {target_branch}...")
+    run_command(["git", "config", "--global", "--add", "safe.directory", "/github/workspace"])
     run_command(["git", "config", "--global", "user.name", git_user_name])
     run_command(["git", "config", "--global", "user.email", git_user_email])
 
