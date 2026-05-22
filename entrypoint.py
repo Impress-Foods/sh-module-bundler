@@ -15,6 +15,8 @@ from typing import Any, TypedDict
 import requests
 import yaml
 
+from readme import generate_readme
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,7 +60,13 @@ def fetch_yaml(repo: str, path: str, ref: str, token: str) -> Any:
 
 
 def commit_and_push(
-    repo: str, target_branch: str, user: str, email: str, token: str, base_branch: str
+    repo: str,
+    target_branch: str,
+    user: str,
+    email: str,
+    token: str,
+    base_branch: str,
+    build_tag: str,
 ) -> None:
     logger.info("Committing and pushing to branch: %s...", target_branch)
     run_command(["git", "config", "--global", "--add", "safe.directory", os.getcwd()])
@@ -90,13 +98,12 @@ def commit_and_push(
             ["git", "push", "--force", "origin", f"HEAD:{target_branch}"],
             env=git_env,
         )
-        tag = f"build-{datetime.now():%Y%m%d%H%M%S}"
-        run_command(["git", "tag", "-f", tag, "HEAD"], env=git_env)
+        run_command(["git", "tag", "-f", build_tag, "HEAD"], env=git_env)
         run_command(
-            ["git", "push", "--force", "origin", f"refs/tags/{tag}"],
+            ["git", "push", "--force", "origin", f"refs/tags/{build_tag}"],
             env=git_env,
         )
-        logger.info("Tagged commit as %s", tag)
+        logger.info("Tagged commit as %s", build_tag)
     else:
         logger.info("Nothing new to commit.")
 
@@ -120,7 +127,10 @@ def extract_modules(base_temp_path: str, workspace: str, whitelist: list[str]) -
                 shutil.copytree(item, Path(workspace) / item.name, dirs_exist_ok=True)
 
     for module in whitelist:
-        if (Path(workspace) / module).exists():
+        module_path = Path(workspace) / module
+        if module_path.exists() and any(
+            (module_path / mf).exists() for mf in ("__manifest__.py", "__openerp__.py")
+        ):
             continue
         found = False
         for repo_dir in search_root.iterdir():
@@ -291,6 +301,17 @@ def main() -> None:
 
     generate_requirements(workspace)
 
+    build_tag = f"build-{datetime.now():%Y%m%d%H%M%S}"
+    generate_readme(
+        workspace,
+        repo,
+        base_branch,
+        target_branch,
+        event_type,
+        build_tag,
+        set(module_whitelist),
+    )
+
     if not skip_push:
         commit_and_push(
             repo,
@@ -299,6 +320,7 @@ def main() -> None:
             git_user_email,
             github_token,
             base_branch,
+            build_tag,
         )
     else:
         logger.info("SKIP_PUSH set - skipping commit and push")

@@ -18,6 +18,19 @@
     ],
     "settings": {
         "python.pyrefly.diagnosticMode": "workspace",
-        "python.pyrefly.typeCheckingMode": "strict"
+        "python.pyrefly.typeCheckingMode": "strict",
+        "python-envs.pythonProjects": [
+            {
+                "path": ".",
+                "envManager": "ms-python.python:venv",
+                "packageManager": "ms-python.python:pip"
+            },
+            {
+                "path": ".mypy_cache",
+                "envManager": "ms-python.python:venv",
+                "packageManager": "ms-python.python:pip",
+                "workspace": "action"
+            }
+        ]
     },
 }
