@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+**/*.pyc
+.env
+.devcontainer/
+.vscode/
+tests/
+Makefile
+.pre-commit-config.yaml
+.github/
+*.md
+sh_workspace.code-workspace
+.gitignore

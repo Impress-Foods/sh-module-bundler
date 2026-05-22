@@ -3,8 +3,11 @@ import base64
 import logging
 import os
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
+import tomllib
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -12,6 +15,13 @@ import requests
 import yaml
 
 logger = logging.getLogger(__name__)
+
+
+def get_version() -> str:
+    pyproject = Path(__file__).resolve().parent / "pyproject.toml"
+    with open(pyproject, "rb") as f:
+        data = tomllib.load(f)
+    return data["project"]["version"]
 
 
 class RepoRemoteConfig(TypedDict):
@@ -23,10 +33,10 @@ class RepoConfig(TypedDict):
     merges: list[str]
 
 
-def run_command(cmd: list[str], cwd: str | None = None) -> None:
+def run_command(cmd: list[str], cwd: str | None = None, env: dict[str, str] | None = None) -> None:
     """Executes a system command and streams live output to the runner log."""
     logger.info("Running command: %s", " ".join(cmd))
-    result = subprocess.run(cmd, cwd=cwd, text=True, capture_output=False)
+    result = subprocess.run(cmd, cwd=cwd, env=env, text=True, capture_output=False)
     if result.returncode != 0:
         logger.error("Command failed with exit code %d", result.returncode)
         sys.exit(result.returncode)
@@ -54,23 +64,35 @@ def commit_and_push(
     run_command(["git", "config", "--global", "user.name", user])
     run_command(["git", "config", "--global", "user.email", email])
 
-    result = subprocess.run(["git", "remote", "get-url", "origin"], capture_output=True, text=True)
-    origin_url = result.stdout.strip()
-    auth_url = origin_url.replace("https://", f"https://x-access-token:{token}@")
-    run_command(["git", "remote", "set-url", "origin", auth_url])
+    fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
+    with os.fdopen(fd, "w") as f:
+        f.write("#!/bin/sh\n")
+        f.write('echo "$GIT_TOKEN"\n')
+    os.chmod(helper_path, stat.S_IRUSR | stat.S_IXUSR)
+
+    git_env = os.environ.copy()
+    git_env["GIT_ASKPASS"] = helper_path
+    git_env["GIT_USERNAME"] = "x-access-token"
+    git_env["GIT_TOKEN"] = token
 
     run_command(["git", "add", "-A"])
 
     result = subprocess.run(
         ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
+        env=git_env,
         capture_output=True,
         text=True,
     )
     if result.returncode == 0:
         logger.info("Commit created. Pushing to %s...", target_branch)
-        run_command(["git", "push", "--force", "origin", f"HEAD:{target_branch}"])
+        run_command(
+            ["git", "push", "--force", "origin", f"HEAD:{target_branch}"],
+            env=git_env,
+        )
     else:
         logger.info("Nothing new to commit.")
+
+    os.unlink(helper_path)
 
 
 def extract_modules(base_temp_path: str, workspace: str, whitelist: list[str]) -> bool:
@@ -189,6 +211,10 @@ def main() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
     )
+
+    if len(sys.argv) > 1 and sys.argv[1] == "--version":
+        print(get_version())
+        return
 
     base_temp_path = "/tmp/bundler"
 

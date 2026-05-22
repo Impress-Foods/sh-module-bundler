@@ -14,6 +14,10 @@ inputs:
   base_branch:
     description: "Base branch of the code repo to fetch config files from"
     required: true
+  git_user_name:
+    description: "Git user name to use for pushing to repo"
+  git_user_email:
+    description: "Git user email to use for pushing to repo"
 
 runs:
   using: "docker"
