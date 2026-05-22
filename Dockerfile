@@ -10,6 +10,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-dev | uv pip sync --system -
 
 COPY entrypoint.py /entrypoint.py
+COPY readme.py /readme.py
 RUN chmod +x /entrypoint.py
 RUN mkdir -m 777 -p /tmp/bundler/tmp_git_aggregate
 
