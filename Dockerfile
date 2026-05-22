@@ -1,14 +1,13 @@
 FROM python:3.11-slim-bookworm
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-ENV UV_SYSTEM_PYTHON=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv export --frozen --no-dev | uv pip sync --system -
 
 COPY entrypoint.py /entrypoint.py
 RUN chmod +x /entrypoint.py
