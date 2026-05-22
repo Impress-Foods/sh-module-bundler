@@ -59,26 +59,25 @@ def fetch_yaml(repo: str, path: str, ref: str, token: str) -> Any:
     return yaml.safe_load(content)
 
 
+def setup_git(user: str, email: str, token: str) -> None:
+    run_command(["git", "config", "--global", "--add", "safe.directory", os.getcwd()])
+    run_command(["git", "config", "--global", "user.name", user])
+    run_command(["git", "config", "--global", "user.email", email])
+
+
 def commit_and_push(
     repo: str,
     target_branch: str,
-    user: str,
-    email: str,
     token: str,
     base_branch: str,
     build_tag: str,
 ) -> None:
     logger.info("Committing and pushing to branch: %s...", target_branch)
-    run_command(["git", "config", "--global", "--add", "safe.directory", os.getcwd()])
-    run_command(["git", "config", "--global", "user.name", user])
-    run_command(["git", "config", "--global", "user.email", email])
-
     fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
     with os.fdopen(fd, "w") as f:
         f.write("#!/bin/sh\n")
         f.write('echo "$GIT_TOKEN"\n')
     os.chmod(helper_path, stat.S_IRUSR | stat.S_IXUSR)
-
     git_env = os.environ.copy()
     git_env["GIT_ASKPASS"] = helper_path
     git_env["GIT_USERNAME"] = "x-access-token"
@@ -263,6 +262,8 @@ def main() -> None:
             logger.error("Missing base branch")
             sys.exit(1)
 
+    setup_git(git_user_name, git_user_email, github_token)
+
     pipeline_data = fetch_yaml(repo, "pipeline.yml", base_branch, github_token) or {}
 
     module_whitelist = pipeline_data.get("module_whitelist", [])
@@ -316,8 +317,6 @@ def main() -> None:
         commit_and_push(
             repo,
             target_branch,
-            git_user_name,
-            git_user_email,
             github_token,
             base_branch,
             build_tag,
