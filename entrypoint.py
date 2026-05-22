@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import tomllib
+from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict
 
@@ -89,6 +90,13 @@ def commit_and_push(
             ["git", "push", "--force", "origin", f"HEAD:{target_branch}"],
             env=git_env,
         )
+        tag = f"build-{datetime.now():%Y%m%d%H%M%S}"
+        run_command(["git", "tag", "-f", tag, "HEAD"], env=git_env)
+        run_command(
+            ["git", "push", "--force", "origin", f"refs/tags/{tag}"],
+            env=git_env,
+        )
+        logger.info("Tagged commit as %s", tag)
     else:
         logger.info("Nothing new to commit.")
 
