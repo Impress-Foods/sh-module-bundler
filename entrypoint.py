@@ -115,6 +115,27 @@ def clean_workspace(workspace: str) -> None:
             shutil.rmtree(item_path)
 
 
+def generate_requirements(workspace: str) -> None:
+    """Generate requirements.txt from plucked modules' external dependencies."""
+    logger.info("Generating aggregated requirements.txt...")
+    result = subprocess.run(
+        ["oca-gen-external-dependencies"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 1:
+        logger.info("No pyproject.toml files found, skipping requirements generation")
+    elif result.returncode != 0:
+        logger.warning(
+            "pyproject_dependencies failed (exit %d): %s",
+            result.returncode,
+            result.stderr.strip(),
+        )
+    else:
+        logger.info("Generated requirements.txt")
+
+
 def get_prs_to_include(
     repos_config: dict[str, RepoConfig],
     base_branch: str,
@@ -233,6 +254,8 @@ def main() -> None:
     if not extracted:
         logger.error("Could not extract modules")
         sys.exit(1)
+
+    generate_requirements(workspace)
 
     if not skip_push:
         commit_and_push(

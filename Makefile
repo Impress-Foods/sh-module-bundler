@@ -4,13 +4,13 @@ install:
 	uv sync --extra dev
 
 lint:
-	ruff check .
+	uv run ruff check .
 
 test:
-	pytest
+	uv run pytest
 
 precommit:
-	pre-commit run --all-files
+	uv run pre-commit run --all-files
 
 lock:
 	uv lock
