@@ -1,0 +1,30 @@
+[project]
+name = "sh-module-bundler"
+version = "0.1.0"
+description = "Bundles third-party Odoo modules into an Odoo.sh deployment repo"
+requires-python = ">=3.11"
+dependencies = [
+    "git-aggregator>=1.6",
+    "pyyaml>=6.0",
+    "requests>=2.34",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pre-commit>=4.2",
+    "pytest>=8",
+    "ruff>=0.11",
+    "types-pyyaml>=6.0",
+    "types-requests>=2.33",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]

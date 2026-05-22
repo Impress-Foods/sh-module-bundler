@@ -16,4 +16,8 @@
             "path": "/tmp/bundler"
         }
     ],
+    "settings": {
+        "python.pyrefly.diagnosticMode": "workspace",
+        "python.pyrefly.typeCheckingMode": "strict"
+    },
 }

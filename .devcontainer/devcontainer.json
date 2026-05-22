@@ -1,5 +1,5 @@
 {
-    "name": "Odoo GitOps Bundler Dev",
+    "name": "Sh Bundler",
     "build": {
         "dockerfile": "Dockerfile"
     },
@@ -15,7 +15,8 @@
         "vscode": {
             "extensions": [
                 "ms-python.debugpy",
-                "meta.pyrefly"
+                "meta.pyrefly",
+                "charliermarsh.ruff"
             ]
         }
     }
