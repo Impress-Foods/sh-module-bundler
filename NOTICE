@@ -1,0 +1,13 @@
+sh-module-bundler
+Copyright (c) Impress Foods
+
+This Docker image includes git-aggregator, a tool for aggregating Odoo module
+repositories, copyright (c) Acsone SA/NV.
+
+git-aggregator is free software licensed under the
+GNU Affero General Public License v3.0 (AGPL-3.0).
+
+The full text of the AGPL-3.0 license is available in LICENSE.AGPLv3.
+
+You may obtain the source code for git-aggregator at:
+  https://github.com/OCA/git-aggregator

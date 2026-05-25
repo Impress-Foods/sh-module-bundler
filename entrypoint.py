@@ -15,7 +15,7 @@ from typing import Any, TypedDict
 import requests
 import yaml
 
-from readme import generate_readme
+from readme_generator import generate_readme
 
 logger = logging.getLogger(__name__)
 
