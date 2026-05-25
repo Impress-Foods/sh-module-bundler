@@ -71,6 +71,9 @@ def commit_and_push(
     token: str,
     base_branch: str,
     build_tag: str,
+    alt_repo: str = "",
+    alt_repo_target_branch: str = "",
+    alt_repo_token: str = "",
 ) -> None:
     logger.info("Committing and pushing to branch: %s...", target_branch)
     fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
@@ -103,6 +106,24 @@ def commit_and_push(
             env=git_env,
         )
         logger.info("Tagged commit as %s", build_tag)
+
+        if alt_repo and alt_repo_token:
+            alt_repo_url = f"https://x-access-token:{alt_repo_token}@github.com/{alt_repo}"
+            run_command(["git", "remote", "add", "alt", alt_repo_url], env=git_env)
+            run_command(
+                ["git", "push", "--force", "alt", f"HEAD:{alt_repo_target_branch}"],
+                env=git_env,
+            )
+            run_command(
+                ["git", "push", "--force", "alt", f"refs/tags/{build_tag}"],
+                env=git_env,
+            )
+            run_command(["git", "remote", "remove", "alt"], env=git_env)
+            logger.info(
+                "Successfully pushed to alt repo: %s (%s)",
+                alt_repo,
+                alt_repo_target_branch,
+            )
     else:
         logger.info("Nothing new to commit.")
 
@@ -242,6 +263,9 @@ def main() -> None:
     base_branch = os.environ.get("INPUT_BASE_BRANCH", "")
     git_user_name = os.environ.get("INPUT_GIT_USER_NAME", "Odoo.sh Bundler")
     git_user_email = os.environ.get("INPUT_GIT_USER_EMAIL", "bundler@odoo.sh")
+    alt_repo = os.environ.get("INPUT_ALT_REPO", "")
+    alt_repo_target_branch = os.environ.get("INPUT_ALT_REPO_TARGET_BRANCH", "") or target_branch
+    alt_repo_token = os.environ.get("ALT_REPO_TOKEN", "")
     skip_push = os.environ.get("SKIP_PUSH", "").lower() in ("1", "true", "yes")
 
     required = [github_token, repo, event_type, target_branch, base_branch]
@@ -261,6 +285,10 @@ def main() -> None:
         if not base_branch:
             logger.error("Missing base branch")
             sys.exit(1)
+
+    if alt_repo and not alt_repo_token:
+        logger.error("alt_repo is set but ALT_REPO_TOKEN is missing")
+        sys.exit(1)
 
     setup_git(git_user_name, git_user_email, github_token)
 
@@ -320,6 +348,9 @@ def main() -> None:
             github_token,
             base_branch,
             build_tag,
+            alt_repo,
+            alt_repo_target_branch,
+            alt_repo_token,
         )
     else:
         logger.info("SKIP_PUSH set - skipping commit and push")
