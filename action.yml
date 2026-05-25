@@ -18,12 +18,6 @@ inputs:
     description: "Git user name to use for pushing to repo"
   git_user_email:
     description: "Git user email to use for pushing to repo"
-  alt_repo:
-    description: "Alternative repository (org/repo) to optionally push the build result to"
-    required: false
-  alt_repo_target_branch:
-    description: "Branch to push to in the alt repo. Defaults to target_branch"
-    required: false
 
 runs:
   using: "docker"
