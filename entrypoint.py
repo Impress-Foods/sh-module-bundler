@@ -302,6 +302,8 @@ def main() -> None:
 
     generate_requirements(workspace)
 
+    source_sha = os.environ.get("INPUT_SOURCE_SHA", "") or os.environ.get("GITHUB_SHA", "")
+    source_ref = os.environ.get("INPUT_SOURCE_REF", "") or os.environ.get("GITHUB_REF_NAME", "")
     build_tag = f"build-{datetime.now():%Y%m%d%H%M%S}"
     generate_readme(
         workspace,
@@ -311,6 +313,8 @@ def main() -> None:
         event_type,
         build_tag,
         set(module_whitelist),
+        source_sha=source_sha,
+        source_ref=source_ref,
     )
 
     if not skip_push:

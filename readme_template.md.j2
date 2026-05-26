@@ -1,0 +1,47 @@
+# Module Bundle
+
+Automatically generated bundle of Odoo modules.
+
+## Build Info
+
+- **Generated:** {{ build_info.timestamp }}
+- **Source:** {{ build_info.source }}
+- **Target:** {{ build_info.target }}
+- **Event:** {{ build_info.event }}
+- **Build Tag:** {{ build_info.build_tag }}
+- **Ref:** {{ build_info.ref }}
+
+{% if has_both -%}
+{% if custom_modules %}
+## Custom Modules
+
+| Module | Version | License | Author | Summary |
+|--------|---------|---------|--------|---------|
+{% for m in custom_modules %}| {{ m.link }} | {{ m.version }} | {{ m.license_ }} | {{ m.author }} | {{ m.summary }} |
+{% endfor %}{%- endif -%}
+{% if external_modules %}
+## External Modules
+
+| Module | Version | License | Author | Summary |
+|--------|---------|---------|--------|---------|
+{% for m in external_modules %}| {{ m.link }} | {{ m.version }} | {{ m.license_ }} | {{ m.author }} | {{ m.summary }} |
+{% endfor %}{%- endif -%}
+{%- elif installable_modules %}
+## Available Modules
+
+| Module | Version | License | Author | Summary |
+|--------|---------|---------|--------|---------|
+{% for m in installable_modules %}| {{ m.link }} | {{ m.version }} | {{ m.license_ }} | {{ m.author }} | {{ m.summary }} |
+{% endfor %}{%- endif -%}
+{% if unported_modules %}
+## Unported Modules
+
+| Module | Version | License | Author | Summary | Source |
+|--------|---------|---------|--------|---------|--------|
+{% for m in unported_modules %}| {{ m.link }} | {{ m.version }} | {{ m.license_ }} | {{ m.author }} | {{ m.summary }} | {{ m.source }} |
+{% endfor %}{%- endif -%}
+{% if has_requirements %}
+## Requirements
+
+See [requirements.txt](requirements.txt) for Python package dependencies.
+{% endif -%}

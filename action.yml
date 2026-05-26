@@ -18,6 +18,10 @@ inputs:
     description: "Git user name to use for pushing to repo"
   git_user_email:
     description: "Git user email to use for pushing to repo"
+  source_sha:
+    description: "Commit SHA of the source repo (defaults to GITHUB_SHA)"
+  source_ref:
+    description: "Ref name (tag/branch) of the source repo (defaults to GITHUB_REF_NAME)"
 
 runs:
   using: "docker"

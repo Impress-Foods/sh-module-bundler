@@ -4,9 +4,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from jinja2 import Environment, FileSystemLoader
+
 logger = logging.getLogger(__name__)
 
 MANIFEST_FILES = ("__openerp__.py", "__manifest__.py")
+
+_TEMPLATE_DIR = Path(__file__).parent
+_TEMPLATE_NAME = "readme_template.md.j2"
+
+_env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=False)
+_template = _env.get_template(_TEMPLATE_NAME)
 
 
 def _sanitize(text: str) -> str:
@@ -21,6 +29,18 @@ def _format_author(author: str | list[str]) -> str:
     return author or ""
 
 
+def _to_module_dict(
+    row: tuple[str, str, str, str, str, bool, str, bool],
+) -> dict[str, str]:
+    return {
+        "link": row[0],
+        "version": row[1],
+        "license_": row[2],
+        "author": row[3],
+        "summary": row[4],
+    }
+
+
 def generate_readme(
     workspace: str,
     repo: str,
@@ -29,6 +49,8 @@ def generate_readme(
     event_type: str,
     build_tag: str,
     external_modules: set[str] | None = None,
+    source_sha: str = "",
+    source_ref: str = "",
 ) -> None:
     workspace_path = Path(workspace)
     if not workspace_path.is_dir():
@@ -69,70 +91,41 @@ def generate_readme(
     external_installable = [r for r in installable_rows if r[7]]
     total = len(rows)
     has_both = external_modules is not None and custom_installable and external_installable
+    installable_count = len(installable_rows)
+    unported_count = len(unported_rows)
 
-    lines: list[str] = []
-    lines.append("# Module Bundle")
-    lines.append("")
-    lines.append("Automatically generated bundle of Odoo modules.")
-    lines.append("")
-    lines.append("## Build Info")
-    lines.append("")
-    lines.append(f"- **Generated:** {datetime.now().isoformat()}")
-    lines.append(f"- **Source:** {repo}@{base_branch}")
-    lines.append(f"- **Target:** {target_branch}")
-    lines.append(f"- **Event:** {event_type}")
-    lines.append(f"- **Build Tag:** {build_tag}")
-    lines.append("")
-    if total == 0:
-        lines.append("*No modules found in this bundle.*")
-    else:
-        installable_count = len(installable_rows)
-        unported_count = len(unported_rows)
-        stats = f"**{total} module{'s' if total != 1 else ''} — "
-        if unported_count == 0:
-            stats += "all installable"
-        else:
-            stats += f"{installable_count} installable, {unported_count} unported"
-        stats += ".**"
-        lines.append(stats)
-    lines.append("")
+    context = {
+        "build_info": {
+            "timestamp": datetime.now().isoformat(),
+            "source": f"{repo}@{base_branch}",
+            "target": target_branch,
+            "event": event_type,
+            "build_tag": build_tag,
+            "ref": source_ref or (source_sha[:7] if source_sha else ""),
+        },
+        "total": total,
+        "installable_count": installable_count,
+        "unported_count": unported_count,
+        "has_both": has_both,
+        "custom_modules": [_to_module_dict(r) for r in custom_installable],
+        "external_modules": [_to_module_dict(r) for r in external_installable],
+        "installable_modules": [_to_module_dict(r) for r in installable_rows],
+        "unported_modules": [
+            {
+                "link": r[0],
+                "version": r[1],
+                "license_": r[2],
+                "author": r[3],
+                "summary": r[4],
+                "source": "External" if r[7] else "Custom",
+            }
+            for r in unported_rows
+        ],
+        "has_requirements": (workspace_path / "requirements.txt").is_file(),
+    }
 
-    def _write_table(
-        heading: str, rows: list[tuple[str, str, str, str, str, bool, str, bool]]
-    ) -> None:
-        lines.append(f"## {heading}")
-        lines.append("")
-        lines.append("| Module | Version | License | Author | Summary |")
-        lines.append("|--------|---------|---------|--------|---------|")
-        for link, version, license_, author, summary, _, _, _ in rows:
-            lines.append(f"| {link} | {version} | {license_} | {author} | {summary} |")
-        lines.append("")
-
-    if has_both:
-        if custom_installable:
-            _write_table("Custom Modules", custom_installable)
-        if external_installable:
-            _write_table("External Modules", external_installable)
-    elif installable_rows:
-        _write_table("Available Modules", installable_rows)
-
-    if unported_rows:
-        lines.append("## Unported Modules")
-        lines.append("")
-        lines.append("| Module | Version | License | Author | Summary | Source |")
-        lines.append("|--------|---------|---------|--------|---------|--------|")
-        for link, version, license_, author, summary, _, _, is_external in unported_rows:
-            source = "External" if is_external else "Custom"
-            lines.append(f"| {link} | {version} | {license_} | {author} | {summary} | {source} |")
-        lines.append("")
-
-    requirements = workspace_path / "requirements.txt"
-    if requirements.is_file():
-        lines.append("## Requirements")
-        lines.append("")
-        lines.append("See [requirements.txt](requirements.txt) for Python package dependencies.")
-        lines.append("")
+    readme_content = _template.render(context)
 
     readme_path = workspace_path / "README.md"
-    readme_path.write_text("\n".join(lines))
+    readme_path.write_text(readme_content)
     logger.info("Generated README.md with %d modules", total)
