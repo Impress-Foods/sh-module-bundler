@@ -289,7 +289,7 @@ def main() -> None:
     runtime_manifest = write_runtime_manifest(base_temp_path, repos_config)
 
     logger.info("Invoking git-aggregator core dependency engine...")
-    run_command(["gitaggregate", "-c", runtime_manifest], cwd=base_temp_path)
+    run_command(["gitaggregate", "-c", runtime_manifest, "--expand-env"], cwd=base_temp_path)
 
     logger.info("Cleaning stale modules from workspace root...")
     workspace = os.getcwd()
