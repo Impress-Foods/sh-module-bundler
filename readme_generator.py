@@ -94,6 +94,9 @@ def generate_readme(
     installable_count = len(installable_rows)
     unported_count = len(unported_rows)
 
+    logger.info(
+        f"Using {source_ref or (source_sha[:7] if source_sha else '')} as reference in readme"
+    )
     context = {
         "build_info": {
             "timestamp": datetime.now().isoformat(),

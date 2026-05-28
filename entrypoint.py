@@ -292,7 +292,14 @@ def main() -> None:
     run_command(["gitaggregate", "-c", runtime_manifest, "--expand-env"], cwd=base_temp_path)
 
     logger.info("Cleaning stale modules from workspace root...")
+
+    ws_override = os.environ.get("WORKSPACE_OVERRIDE", None)
     workspace = os.getcwd()
+    if ws_override:
+        if not Path(ws_override).is_dir():
+            os.mkdir(ws_override)
+        workspace = ws_override
+
     clean_workspace(workspace)
 
     extracted = extract_modules(base_temp_path, workspace, module_whitelist)

@@ -19,5 +19,6 @@
                 "charliermarsh.ruff"
             ]
         }
-    }
+    },
+    "postCreateCommand": "uv export --frozen | uv pip sync --system -"
 }
