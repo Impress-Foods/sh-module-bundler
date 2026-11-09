@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 import base64
+import contextlib
 import logging
 import os
+import re
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import tomllib
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Any, TypedDict
@@ -53,16 +57,79 @@ def fetch_yaml(repo: str, path: str, ref: str, token: str) -> Any:
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
     }
-    response = requests.get(url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=30)
     response.raise_for_status()
     content = base64.b64decode(response.json()["content"])
     return yaml.safe_load(content)
 
 
-def setup_git(user: str, email: str, token: str) -> None:
+def setup_git(user: str, email: str) -> None:
     run_command(["git", "config", "--global", "--add", "safe.directory", os.getcwd()])
     run_command(["git", "config", "--global", "user.name", user])
     run_command(["git", "config", "--global", "user.email", email])
+
+
+@contextlib.contextmanager
+def git_credentials(token: str) -> Iterator[dict[str, str]]:
+    """Yield an environment that authenticates git to github.com via GIT_ASKPASS.
+
+    The token lives only in a mode-0700 temp script (removed on exit), never in a
+    URL, in argv, or in an environment variable, so it cannot end up in
+    ``.git/config``, logs, or ``--expand-env`` substitutions. The helper only
+    answers prompts for github.com.
+    """
+    fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write("#!/bin/sh\n")
+            f.write('case "$1" in\n')
+            f.write("  *github.com*)\n")
+            f.write('    case "$1" in\n')
+            f.write("      Username*) echo x-access-token ;;\n")
+            f.write(f"      *) echo {shlex.quote(token)} ;;\n")
+            f.write("    esac ;;\n")
+            f.write("  *) echo ;;\n")
+            f.write("esac\n")
+        os.chmod(helper_path, stat.S_IRUSR | stat.S_IXUSR)
+        env = os.environ.copy()
+        env.pop("GITHUB_TOKEN", None)
+        env["GIT_ASKPASS"] = helper_path
+        env["GIT_TERMINAL_PROMPT"] = "0"
+        yield env
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(helper_path)
+
+
+def validate_target_branch(target_branch: str) -> None:
+    """Refuse values that are not a plain branch name (this branch is force-pushed)."""
+    result = subprocess.run(
+        ["git", "check-ref-format", "--branch", target_branch],
+        capture_output=True,
+        text=True,
+    )
+    if (
+        result.returncode != 0
+        or target_branch.startswith(("refs/", "-"))
+        or target_branch == "HEAD"
+    ):
+        logger.error("Invalid target branch: %r", target_branch)
+        sys.exit(1)
+
+
+_MODULE_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
+
+
+def validate_module_whitelist(whitelist: Any) -> list[str]:
+    """Ensure whitelist entries are plain directory names (no path traversal)."""
+    if not isinstance(whitelist, list):
+        logger.error("module_whitelist must be a list")
+        sys.exit(1)
+    for name in whitelist:
+        if not isinstance(name, str) or not _MODULE_NAME_RE.match(name) or ".." in name:
+            logger.error("Invalid module name in module_whitelist: %r", name)
+            sys.exit(1)
+    return whitelist
 
 
 def commit_and_push(
@@ -73,43 +140,33 @@ def commit_and_push(
     build_tag: str,
 ) -> None:
     logger.info("Committing and pushing to branch: %s...", target_branch)
-    fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
-    with os.fdopen(fd, "w") as f:
-        f.write("#!/bin/sh\n")
-        f.write('echo "$GIT_TOKEN"\n')
-    os.chmod(helper_path, stat.S_IRUSR | stat.S_IXUSR)
-    git_env = os.environ.copy()
-    git_env["GIT_ASKPASS"] = helper_path
-    git_env["GIT_USERNAME"] = "x-access-token"
-    git_env["GIT_TOKEN"] = token
+    with git_credentials(token) as git_env:
+        run_command(["git", "add", "-A"])
 
-    run_command(["git", "add", "-A"])
-
-    result = subprocess.run(
-        ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
-        env=git_env,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        logger.info("Commit created. Pushing to %s...", target_branch)
-        run_command(
-            ["git", "push", "--force", "origin", f"HEAD:{target_branch}"],
+        result = subprocess.run(
+            ["git", "commit", "-m", f"Automated build from {repo}@{base_branch}"],
             env=git_env,
+            capture_output=True,
+            text=True,
         )
-        run_command(["git", "tag", "-f", build_tag, "HEAD"], env=git_env)
-        run_command(
-            ["git", "push", "--force", "origin", f"refs/tags/{build_tag}"],
-            env=git_env,
-        )
-        logger.info("Tagged commit as %s", build_tag)
-    else:
-        logger.info("Nothing new to commit.")
-
-    os.unlink(helper_path)
+        if result.returncode == 0:
+            logger.info("Commit created. Pushing to %s...", target_branch)
+            run_command(
+                ["git", "push", "--force", "origin", f"HEAD:refs/heads/{target_branch}"],
+                env=git_env,
+            )
+            run_command(["git", "tag", "-f", build_tag, "HEAD"], env=git_env)
+            run_command(
+                ["git", "push", "--force", "origin", f"refs/tags/{build_tag}"],
+                env=git_env,
+            )
+            logger.info("Tagged commit as %s", build_tag)
+        else:
+            logger.info("Nothing new to commit.")
 
 
 def extract_modules(base_temp_path: str, workspace: str, whitelist: list[str]) -> bool:
+    """Copy modules into the workspace. Exits non-zero if a whitelisted module is missing."""
     logger.info("Commencing module extraction...")
     search_root = Path(base_temp_path)
 
@@ -125,6 +182,7 @@ def extract_modules(base_temp_path: str, workspace: str, whitelist: list[str]) -
                 logger.info("Extracted code repo module: %s", item.name)
                 shutil.copytree(item, Path(workspace) / item.name, dirs_exist_ok=True)
 
+    missing: list[str] = []
     for module in whitelist:
         module_path = Path(workspace) / module
         if module_path.exists() and any(
@@ -142,7 +200,10 @@ def extract_modules(base_temp_path: str, workspace: str, whitelist: list[str]) -
                 found = True
                 break
         if not found:
-            logger.warning("Module '%s' not found in any aggregated repository.", module)
+            missing.append(module)
+    if missing:
+        logger.error("Whitelisted modules not found in any aggregated repository: %s", missing)
+        sys.exit(1)
     return True
 
 
@@ -166,11 +227,12 @@ def generate_requirements(workspace: str) -> None:
     if result.returncode == 1:
         logger.info("No pyproject.toml files found, skipping requirements generation")
     elif result.returncode != 0:
-        logger.warning(
-            "pyproject_dependencies failed (exit %d): %s",
+        logger.error(
+            "oca-gen-external-dependencies failed (exit %d): %s",
             result.returncode,
             result.stderr.strip(),
         )
+        sys.exit(1)
     else:
         logger.info("Generated requirements.txt")
 
@@ -189,26 +251,47 @@ def get_prs_to_include(
         target_label,
     )
 
-    url = f"https://api.github.com/repos/{repo}/pulls?state=open&base={base_branch}"
+    url = f"https://api.github.com/repos/{repo}/pulls"
     headers = {
         "Authorization": f"token {github_token}",
         "Accept": "application/vnd.github.v3+json",
     }
 
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-
-        for pr in response.json():
-            labels = [label["name"] for label in pr.get("labels", [])]
-            if target_label in labels:
+        page = 1
+        while True:
+            response = requests.get(
+                url,
+                headers=headers,
+                params={"state": "open", "base": base_branch, "per_page": 100, "page": page},
+                timeout=30,
+            )
+            response.raise_for_status()
+            prs = response.json()
+            for pr in prs:
+                labels = [label["name"] for label in pr.get("labels", [])]
+                if target_label not in labels:
+                    continue
+                head_repo = (pr["head"].get("repo") or {}).get("full_name", "")
+                if head_repo.lower() != repo.lower():
+                    logger.warning(
+                        "Skipping PR #%d: head is from '%s', not '%s'",
+                        pr["number"],
+                        head_repo or "unknown repo",
+                        repo,
+                    )
+                    continue
                 pr_num = pr["number"]
                 pr_branch = pr["head"]["ref"]
                 logger.info("Found matching PR #%d | Branch: '%s'", pr_num, pr_branch)
 
                 repos_config[code_key]["merges"].append(f"origin {pr_branch}")
+            if len(prs) < 100:
+                break
+            page += 1
     except Exception as e:
-        logger.warning("PR discovery failed: %s. Proceeding with base modules only.", e)
+        logger.error("PR discovery failed: %s. Refusing to build staging without labeled PRs.", e)
+        sys.exit(1)
 
     return repos_config
 
@@ -262,11 +345,12 @@ def main() -> None:
             logger.error("Missing base branch")
             sys.exit(1)
 
-    setup_git(git_user_name, git_user_email, github_token)
+    validate_target_branch(target_branch)
+    setup_git(git_user_name, git_user_email)
 
     pipeline_data = fetch_yaml(repo, "pipeline.yml", base_branch, github_token) or {}
 
-    module_whitelist = pipeline_data.get("module_whitelist", [])
+    module_whitelist = validate_module_whitelist(pipeline_data.get("module_whitelist") or [])
     automation_cfg = pipeline_data.get("automation", {})
     target_label = automation_cfg.get("pr_trigger_label", "to-staging")
 
@@ -275,7 +359,7 @@ def main() -> None:
     repos_config = fetch_yaml(repo, "repos.yml", base_branch, github_token) or {}
 
     code_key = f"{base_temp_path}/code_repo"
-    code_repo_url = f"https://x-access-token:{github_token}@github.com/{repo}"
+    code_repo_url = f"https://github.com/{repo}"
     repos_config[code_key] = {
         "remotes": {"origin": code_repo_url},
         "merges": [f"origin {base_branch}"],
@@ -289,7 +373,12 @@ def main() -> None:
     runtime_manifest = write_runtime_manifest(base_temp_path, repos_config)
 
     logger.info("Invoking git-aggregator core dependency engine...")
-    run_command(["gitaggregate", "-c", runtime_manifest, "--expand-env"], cwd=base_temp_path)
+    with git_credentials(github_token) as aggregate_env:
+        run_command(
+            ["gitaggregate", "-c", runtime_manifest, "--expand-env"],
+            cwd=base_temp_path,
+            env=aggregate_env,
+        )
 
     logger.info("Cleaning stale modules from workspace root...")
 

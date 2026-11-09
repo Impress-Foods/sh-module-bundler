@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
+# System-level so it applies even though Actions overrides HOME at runtime
+RUN git config --system init.defaultBranch main
+
 COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-dev | uv pip sync --system -
 

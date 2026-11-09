@@ -17,10 +17,12 @@ _env = Environment(loader=FileSystemLoader(_TEMPLATE_DIR), autoescape=False)
 _template = _env.get_template(_TEMPLATE_NAME)
 
 
-def _sanitize(text: str) -> str:
+def _sanitize(text: Any) -> str:
+    """Collapse whitespace and escape pipes so the value is safe in a Markdown table cell."""
     if not text:
         return ""
-    return " ".join(text.split())
+    text = " ".join(str(text).split())
+    return text.replace("|", "\\|").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def _format_author(author: str | list[str]) -> str:
@@ -72,13 +74,13 @@ def generate_readme(
         try:
             with open(manifest) as f:
                 data = ast.literal_eval(f.read())
-        except Exception:
-            logger.warning("Could not parse manifest in %s, using defaults", item.name)
+        except Exception as e:
+            logger.warning("Could not parse manifest in %s (%s), using defaults", item.name, e)
             data: dict[str, Any] = {}
         name = data.get("name") or item.name
-        version = data.get("version", "")
-        license_ = data.get("license", "")
-        author = _format_author(data.get("author", ""))
+        version = _sanitize(data.get("version", ""))
+        license_ = _sanitize(data.get("license", ""))
+        author = _sanitize(_format_author(data.get("author", "")))
         summary = _sanitize(data.get("summary", ""))
         installable = data.get("installable", True)
         is_external = external_modules is not None and item.name in external_modules
