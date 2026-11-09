@@ -74,9 +74,10 @@ def git_credentials(token: str) -> Iterator[dict[str, str]]:
     """Yield an environment that authenticates git to github.com via GIT_ASKPASS.
 
     The token lives only in a mode-0700 temp script (removed on exit), never in a
-    URL, in argv, or in an environment variable, so it cannot end up in
-    ``.git/config``, logs, or ``--expand-env`` substitutions. The helper only
-    answers prompts for github.com.
+    URL or argv, so it cannot end up in ``.git/config`` or logs through the
+    code repo remote. The helper only answers prompts for github.com.
+    ``GITHUB_TOKEN`` is intentionally left in the environment because
+    ``repos.yml`` files may reference it via ``--expand-env``.
     """
     fd, helper_path = tempfile.mkstemp(suffix=".sh", prefix="git-askpass-")
     try:
@@ -92,7 +93,6 @@ def git_credentials(token: str) -> Iterator[dict[str, str]]:
             f.write("esac\n")
         os.chmod(helper_path, stat.S_IRUSR | stat.S_IXUSR)
         env = os.environ.copy()
-        env.pop("GITHUB_TOKEN", None)
         env["GIT_ASKPASS"] = helper_path
         env["GIT_TERMINAL_PROMPT"] = "0"
         yield env

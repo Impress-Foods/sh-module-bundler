@@ -80,8 +80,7 @@ def test_git_credentials_hides_token_and_cleans_up():
     with patch.dict(os.environ, {"GITHUB_TOKEN": "s3cret"}):
         with git_credentials("s3cret'tok") as env:
             helper = env["GIT_ASKPASS"]
-            assert "GITHUB_TOKEN" not in env
-            assert "s3cret" not in "".join(env.values()).replace(helper, "")
+            assert env["GITHUB_TOKEN"] == "s3cret"  # repos.yml may use ${GITHUB_TOKEN}
             run = lambda prompt: subprocess.run(  # noqa: E731
                 [helper, prompt], capture_output=True, text=True
             ).stdout.strip()
